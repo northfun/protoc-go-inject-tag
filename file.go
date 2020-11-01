@@ -15,6 +15,12 @@ var (
 	rComment = regexp.MustCompile(`^//\s*@inject_tag:\s*(.*)$`)
 	rInject  = regexp.MustCompile("`.+`$")
 	rTags    = regexp.MustCompile(`[\w_]+:"[^"]+"`)
+
+	lowercaseIgnore = []string{
+		"state",
+		"sizeCache",
+		"unknownFields",
+	}
 )
 
 type textArea struct {
@@ -22,6 +28,26 @@ type textArea struct {
 	End        int
 	CurrentTag string
 	InjectTag  string
+}
+
+func inLowercaseIgnoreSlc(name string) bool {
+	for i := range lowercaseIgnore {
+		if name == lowercaseIgnore[i] {
+			return true
+		}
+	}
+	return false
+}
+
+func getCurrentTag(field *ast.Field) (tag string, start, end int) {
+	if field == nil {
+		return "", 0, 0
+	}
+	if field.Tag == nil || len(field.Tag.Value) == 0 {
+		return "", int(field.Pos()), int(field.End())
+	}
+
+	return field.Tag.Value[1 : len(field.Tag.Value)-1], int(field.Pos()), int(field.End())
 }
 
 func parseFile(inputPath string, xxxSkip []string) (areas []textArea, err error) {
@@ -72,12 +98,15 @@ func parseFile(inputPath string, xxxSkip []string) (areas []textArea, err error)
 			// skip if field has no doc
 			if len(field.Names) > 0 {
 				name := field.Names[0].Name
-				if len(xxxSkip) > 0 && strings.HasPrefix(name, "XXX") {
-					currentTag := field.Tag.Value
+				if len(xxxSkip) > 0 &&
+					(strings.HasPrefix(name, "XXX") ||
+						(inLowercaseIgnoreSlc(name))) {
+
+					currentTag, start, end := getCurrentTag(field)
 					area := textArea{
-						Start:      int(field.Pos()),
-						End:        int(field.End()),
-						CurrentTag: currentTag[1 : len(currentTag)-1],
+						Start:      start,
+						End:        end,
+						CurrentTag: currentTag,
 						InjectTag:  builder.String(),
 					}
 					areas = append(areas, area)
